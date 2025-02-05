@@ -10,47 +10,45 @@ load_dotenv('keys.env')
 
 hashedkey = os.getenv('API_KEY')
 
+def authenticate(token):
+    if not token or not token.startswith('Bearer '):
+        return False
+    token = token.split(' ')[1].encode('utf-8')
+    return hashlib.sha256(token).hexdigest() == hashedkey
 
-@app.route("/system_api")
-def home():
-    auth_header = request.headers.get('Authorization')
-    if auth_header and auth_header.startswith('Bearer '):
-        token = auth_header.split(' ')[1]
-        token = token.encode('utf-8')
-        hashtoken = hashlib.sha256(token).hexdigest()
-        if hashedkey != hashtoken:
-            return jsonify({"message": "Invalid Bearer Token"}), 200
-        else:
-            # Get CPU information
-            cpu_count = psutil.cpu_count()
-            cpu_usage = psutil.cpu_percent(interval=1)
+@app.route("/cpu", methods=["GET"])
+def get_cpu():
+    if not authenticate(request.headers.get('Authorization')):
+        return jsonify({"message": "Authorization Error"}), 401
+    return jsonify({
+        "CPU_Count": psutil.cpu_count(),
+        "CPU_Usage": psutil.cpu_percent(interval=1)
+    }), 200
 
-            # Get Memory information
-            memory = psutil.virtual_memory()
+@app.route("/memory", methods=["GET"])
+def get_memory():
+    if not authenticate(request.headers.get('Authorization')):
+        return jsonify({"message": "Authorization Error"}), 401
+    return jsonify({
+        "Memory_Usage": psutil.virtual_memory().percent
+    }), 200
 
-            memory_percentage = memory.percent
+@app.route("/disk", methods=["GET"])
+def get_disk():
+    if not authenticate(request.headers.get('Authorization')):
+        return jsonify({"message": "Authorization Error"}), 401
+    return jsonify({
+        "Disk_Usage": psutil.disk_usage('/').percent
+    }), 200
 
-            # Get Disk information
-            disk_usage = psutil.disk_usage('/')
-
-            disk_percentage = disk_usage.percent
-
-            # Network Information
-            net_io = psutil.net_io_counters()
-            net_if_addrs = psutil.net_if_addrs()
-
-            system_info_dict = {
-                "CPU_Count": cpu_count,
-                "CPU_Usage": cpu_usage,
-                "Memory": memory_percentage,
-                "Disk_Usage": disk_percentage,
-                "Network": net_io,
-                "Network_Interface": net_if_addrs,
-            }
-
-            return jsonify(system_info_dict), 200
-    return jsonify({"message": "Authorization Error"})
-
+@app.route("/network", methods=["GET"])
+def get_network():
+    if not authenticate(request.headers.get('Authorization')):
+        return jsonify({"message": "Authorization Error"}), 401
+    return jsonify({
+        "Network_IO": psutil.net_io_counters()._asdict(),
+        "Network_Interfaces": {iface: [addr._asdict() for addr in addrs] for iface, addrs in psutil.net_if_addrs().items()}
+    }), 200
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=2000, debug=True)
